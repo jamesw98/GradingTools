@@ -37,11 +37,6 @@ kicks off all the grading
 def grade(args):
     regrade = debug =  False
 
-    # # ensures proper arguments
-    # if (len(sys.argv) < 3):
-    #     print("Error: Invalid arguments, invocation:\n    ./grade_all.py <dir to grade> <json info file>")
-    #     return 
-
     # ensures first argument is a directory
     if (not os.path.isdir(args.directory)):
         print(f"Creating {args.directory}...")
