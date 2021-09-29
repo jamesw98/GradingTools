@@ -5,17 +5,13 @@ import os
 import os.path
 import json
 import re
+import argparse
 import subprocess as sp
 from os import path
 from shutil import copy, rmtree
 
 from canvas_utils import download_submissions, attach_files_and_grade
 from grading_info import Grading_Info, get_value_from_json
-
-# files to cleanup after compiling and running for different langs
-PAS_CLEANUP = ["o"]
-HAS_CLEANUP = ["hi", "o"]
-EXTENSIONS_PER_COMPILER = {"fpc":PAS_CLEANUP, "ghc":HAS_CLEANUP}
 
 """
 run a given test case generator, if the generator is a python file, it should have a shebang and 'x' permissions so
@@ -38,39 +34,39 @@ def poke_generator(data, generator_filename):
 """
 kicks off all the grading 
 """
-def grade():
+def grade(args):
     regrade = debug =  False
 
-    # ensures proper arguments
-    if (len(sys.argv) < 3):
-        print("Error: Invalid arguments, invocation:\n    ./grade_all.py <dir to grade> <json info file>")
-        return 
+    # # ensures proper arguments
+    # if (len(sys.argv) < 3):
+    #     print("Error: Invalid arguments, invocation:\n    ./grade_all.py <dir to grade> <json info file>")
+    #     return 
 
     # ensures first argument is a directory
-    if (not os.path.isdir(sys.argv[1])):
-        print(f"Creating {sys.argv[1]}...")
-        os.mkdir(f"{sys.argv[1]}/")
+    if (not os.path.isdir(args.directory)):
+        print(f"Creating {args.directory}...")
+        os.mkdir(f"{args.directory}/")
 
     # checks for command line arguments
     # debug argument
-    if (sys.argv[-1] == "--debug"):
+    if (args.debug):
         print("<!> Running in debug mode. Grades will not updated in Canvas and feedback will not be uploaded!\n")
         regrade = True
         debug = True
     # force-regrade 
-    elif (sys.argv[-1] == "--force-regrade" or sys.argv[-1] == "--force"):
+    elif (args.force_regrade):
         print("<!> Forcefully regarding! All student's latest submissions will be dowloaded and regraded!\n")
         regrade = True
 
     # gets the directory to put the submissions in
-    dir_to_grade = f"{os.getcwd()}/{sys.argv[1]}"
+    dir_to_grade = f"{os.getcwd()}/{args.directory}"
 
     # ensures there is a slash in the dir name
     if (dir_to_grade[-1] != '/'):
         dir_to_grade += '/'
 
     # gets the json_filename
-    json_filename = sys.argv[2]
+    json_filename = args.json
 
     # ensures second file is a json info file
     if (not os.path.isfile(json_filename) and ".json" not in json_filename):
@@ -150,11 +146,6 @@ def grade():
     print(f"Total Submissions:               {total_submissions}")
     if graded_submissions > 0:
         print(f"Average Score (for new/updated): {scores_for_avg/graded_submissions}/{info.total_points}")
-
-    # cleans up extraneous files
-    # this doesn't really do anything at the moment, will be changed later
-    # if (info.compiled):
-        # cleanup(info.compiler)
 
 def grade_external(info, dir_to_grade, dont_grade, result_csv, timeout):
     total_submissions = graded_submissions = scores_for_avg = 0
@@ -676,14 +667,6 @@ def missing_json(info):
             not info.files_to_upload or not info.required_files
         )))
 
-# cleans up generated files (.o, .hi, etc)
-def cleanup(compiler):   
-    for f in os.listdir(os.getcwd()):
-        if ("." in f):
-            extension = f.split(".")[1]
-            if (extension in EXTENSIONS_PER_COMPILER[compiler]):
-                os.remove(f)
-
 # compiles a submission
 def compile(compiler, submission):
     process = sp.run([compiler, submission], check=False, universal_newlines=True, stdout=sp.PIPE, stderr=sp.PIPE)
@@ -717,7 +700,7 @@ def grab_score(filename):
 # runs a command through the subprocess library
 def run_cmd(exe, args, timeout):
     exe = [exe]
-    #stdout=sp.PIPE, stderr=sp.PIPE
+
     try:
         exe = sp.run(exe + args, check=False, universal_newlines=True, stdout=sp.PIPE, stderr=sp.PIPE, timeout=timeout)
     except sp.TimeoutExpired as e:
@@ -743,6 +726,20 @@ def get_exe_output_stdin(exe, args, input_, timeout):
         error = exe.stdout.replace("\n", "\n> ")
         return (False, error)
 
+# gets the arguments for the program
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--directory", type=str, required="True", help="The dir to create (first time grading) or to regrade\nNote: for local grading, the dir must exist")
+    parser.add_argument("-j", "--json", type=str, required="True", help="The json info file for this assignment")
+    parser.add_argument("-f", "--force-regrade", action="store_true", help="Forcefully regrade an entire directory/assignment")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode, regrades all and does not upload grades")
+    parser.add_argument("-l", "--local-files", action="store_true", help="Use this when you are only grading locally, no downloading/uploading submissions")
+    args = parser.parse_args()
+    
+    return args
+
 # main
 if (__name__ == "__main__"):
-    grade()
+    args = get_args()
+    print(args)
+    grade(args)
