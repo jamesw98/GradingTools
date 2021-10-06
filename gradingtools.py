@@ -97,9 +97,13 @@ def grade(args):
         # moves copies of all the required files into the dir to grade for the language you are using
         copy_compiled_required_files(info, dir_to_grade) if info.compiled else copy_interpreted_required_files(info, dir_to_grade)
     
+    dont_grade = []
+
     # downloads all the submissions and gets the submissions that shouldn't be graded
     # this is the case with submissions that have not been updated since the last run
-    dont_grade = download_submissions(assignment_id, dir_to_grade, regrade)
+    # this won't be run if you are running on local files only
+    if not args.local:
+        dont_grade = download_submissions(assignment_id, dir_to_grade, regrade)
     
     for i in range(len(dont_grade)):
         dont_grade[i] = dont_grade[i].split("/")[-1]
@@ -128,8 +132,10 @@ def grade(args):
     
     result_csv.close()
 
-    if (not debug):
-        attach_files_and_grade(assignment_id, "results.csv")
+    if not debug:
+        if not args.local:
+            attach_files_and_grade(assignment_id, "results.csv")
+        
         print(f"""Finished!\nGrades have been updated in Canvas and feedback has been uploaded\n
               Check {dir_to_grade}results.csv for grades""")
     else:
@@ -728,7 +734,7 @@ def get_args():
     parser.add_argument("-j", "--json", type=str, required="True", help="The json info file for this assignment")
     parser.add_argument("-f", "--force-regrade", action="store_true", help="Forcefully regrade an entire directory/assignment")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode, regrades all and does not upload grades")
-    parser.add_argument("-l", "--local-files", action="store_true", help="Use this when you are only grading locally, no downloading/uploading submissions")
+    parser.add_argument("-l", "--local", action="store_true", help="Use this when you are only grading locally, no downloading/uploading submissions")
     args = parser.parse_args()
     
     return args
