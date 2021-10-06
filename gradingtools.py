@@ -38,7 +38,11 @@ def grade(args):
     regrade = debug =  False
 
     # ensures first argument is a directory
-    if (not os.path.isdir(args.directory)):
+    if not os.path.isdir(args.directory):
+        if args.local:
+            print(f"Error: {args.directory} was not found, for local grading this directory must exist") 
+            exit(1)
+        
         print(f"Creating {args.directory}...")
         os.mkdir(f"{args.directory}/")
 
@@ -97,9 +101,13 @@ def grade(args):
         # moves copies of all the required files into the dir to grade for the language you are using
         copy_compiled_required_files(info, dir_to_grade) if info.compiled else copy_interpreted_required_files(info, dir_to_grade)
     
+    dont_grade = []
+
     # downloads all the submissions and gets the submissions that shouldn't be graded
     # this is the case with submissions that have not been updated since the last run
-    dont_grade = download_submissions(assignment_id, dir_to_grade, regrade)
+    # this won't be run if you are running on local files only
+    if not args.local:
+        dont_grade = download_submissions(assignment_id, dir_to_grade, regrade)
     
     for i in range(len(dont_grade)):
         dont_grade[i] = dont_grade[i].split("/")[-1]
@@ -128,8 +136,10 @@ def grade(args):
     
     result_csv.close()
 
-    if (not debug):
-        attach_files_and_grade(assignment_id, "results.csv")
+    if not debug:
+        if not args.local:
+            attach_files_and_grade(assignment_id, "results.csv")
+        
         print(f"""Finished!\nGrades have been updated in Canvas and feedback has been uploaded\n
               Check {dir_to_grade}results.csv for grades""")
     else:
@@ -183,8 +193,8 @@ def grade_external(info, dir_to_grade, dont_grade, result_csv, timeout):
 
             os.rename(submission, info.student_filename)
 
-            run_cmd(info.build_step_command, timeout)
-            compile_result = run_cmd(info.compile_step_command, timeout)
+            run_cmd(info.build_step_command, [], timeout)
+            compile_result = run_cmd(info.compile_step_command, [], timeout)
 
             if not compile_result[0]:
                 output_file.write(f"Your submission did not compile. See compiler output below\nYour score: 0/{info.total_points}\n\nCompiler Output:\n")
@@ -200,7 +210,7 @@ def grade_external(info, dir_to_grade, dont_grade, result_csv, timeout):
                 result_csv.write(f"{student_name},{student_id},{score},{dir_to_grade}{sub_file}/{student_name}.results.txt\n")
                 continue
 
-            run_result = run_cmd(info.run_step_command, timeout)
+            run_result = run_cmd(info.run_step_command, [], timeout)
 
             if not run_result[0] or not os.path.isfile(info.file_with_grade):
                 output_file.write(f"Your submission did not produce the expected result file when running the driver. Most likely a Segmentation Fault\nYour score: 0/{info.total_points}")
@@ -306,7 +316,7 @@ def grade_interpreted(info, dir_to_grade, dont_grade, result_csv, timeout):
                                         info.main_file, 
                                         info.common_file, 
                                         output_file,
-                                        timeout)
+                                        timeout, info)
                 
             # write score, special message for people that got a 100 :)
             if (score == info.total_points):
@@ -439,6 +449,7 @@ def grade_compiled(info, dir_to_grade, dont_grade, orig_dir, json_file, json_fil
                                                 output_file,
                                                 info.reference_exe_args,
                                                 info.student_exe_args,
+                                                info.compiler,
                                                 timeout)
 
             # write score, special message for people that got a 100 :)
@@ -468,11 +479,11 @@ Runs tests for interpreted submissions
     common_file        - the file/class that is represented by both the student's submission and the reference solution
     output_file        - the output file for this submission
 """
-def run_test_interpreted(student_file, points, reference_solution, main_file, common_file, output_file, timeout):
+def run_test_interpreted(student_file, points, reference_solution, main_file, common_file, output_file, timeout, info):
     score = 0
 
     os.rename(student_file, common_file)
-    student_run = run_cmd(f"./{main_file}", timeout)
+    student_run = run_cmd(f"./{main_file}", info.student_exe_args, timeout)
 
     if (not student_run[0]):
         output_file.write(f"An exception occurred while running your program:\n{student_run[1]}\n")
@@ -483,13 +494,13 @@ def run_test_interpreted(student_file, points, reference_solution, main_file, co
     os.rename(reference_solution, common_file)
 
     # shouldn't need to check that the reference solution encounters an exception
-    reference_output = run_cmd(f"./{main_file}", timeout)[1].split("\n")
+    reference_output = run_cmd(f"./{main_file}", info.reference_exe_args, timeout)[1].split("\n")
 
     for i in range(len(reference_output) - 1):
         if (i >= len(student_output)):
             output_file.write(f"Your code did not produce enough lines! -{points} points")
             output_file.write(f"Expected: {reference_output[i]}\n")
-            output_file.write(f"Recieved: <empty line>\n\n")
+            output_file.write(f"Received: <empty line>\n\n")
         elif (student_output[i].lower() == reference_output[i].lower()):
             score += points
         else:
@@ -557,7 +568,7 @@ Runs tests that write to standard output
     exp_stu_output - the output of the student's solution
     output_file    - the output file for this submission
 """
-def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_output, exp_stu_output, output_file, ref_args, stu_args, timeout):
+def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_output, exp_stu_output, output_file, ref_args, stu_args, compiler, timeout):
     score = 0
 
     # run reference solution on generated input
@@ -568,6 +579,9 @@ def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_out
     
     ref_lines = open(exp_ref_output, "r").readlines()
     # run student solution on generated input
+    
+    if compiler == "gcc":
+        student_exe = "./a.out"
 
     student_output = run_cmd(student_exe, stu_args, timeout)
     if (not student_output[0]):
@@ -728,7 +742,7 @@ def get_args():
     parser.add_argument("-j", "--json", type=str, required="True", help="The json info file for this assignment")
     parser.add_argument("-f", "--force-regrade", action="store_true", help="Forcefully regrade an entire directory/assignment")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode, regrades all and does not upload grades")
-    parser.add_argument("-l", "--local-files", action="store_true", help="Use this when you are only grading locally, no downloading/uploading submissions")
+    parser.add_argument("-l", "--local", action="store_true", help="Use this when you are only grading locally, no downloading/uploading submissions")
     args = parser.parse_args()
     
     return args

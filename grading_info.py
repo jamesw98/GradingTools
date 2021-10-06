@@ -24,6 +24,13 @@ class Grading_Info:
             self.get_external_grading_info(json_filename, json_file)
         
         self.total_points    = get_value_from_json("total_points", json_file, json_filename)
+        
+        # optional args
+        if "reference_exe_args" in json_file:
+            self.reference_exe_args = get_value_from_json("reference_exe_args", json_file, json_filename)
+
+        if "student_exe_args" in json_file:
+            self.student_exe_args = get_value_from_json("student_exe_args", json_file, json_filename)
 
         if "timeout" in json_file:
             self.timeout = get_value_from_json("timeout", json_file, json_filename)
@@ -66,11 +73,7 @@ class Grading_Info:
         self.reference_exe_args = []
         self.student_exe_args   = []
 
-        if "reference_exe_args" in json_file:
-            self.reference_exe_args = get_value_from_json("reference_exe_args", json_file, json_filename)
-
-        if "student_exe_args" in json_file:
-            self.student_exe_args = get_value_from_json("student_exe_args", json_file, json_filename)
+       
 
 """
 gets values from a given json file
