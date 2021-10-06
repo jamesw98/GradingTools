@@ -38,7 +38,11 @@ def grade(args):
     regrade = debug =  False
 
     # ensures first argument is a directory
-    if (not os.path.isdir(args.directory)):
+    if not os.path.isdir(args.directory):
+        if args.local:
+            print(f"Error: {args.directory} was not found, for local grading this directory must exist") 
+            exit(1)
+        
         print(f"Creating {args.directory}...")
         os.mkdir(f"{args.directory}/")
 
@@ -189,8 +193,8 @@ def grade_external(info, dir_to_grade, dont_grade, result_csv, timeout):
 
             os.rename(submission, info.student_filename)
 
-            run_cmd(info.build_step_command, timeout)
-            compile_result = run_cmd(info.compile_step_command, timeout)
+            run_cmd(info.build_step_command, [], timeout)
+            compile_result = run_cmd(info.compile_step_command, [], timeout)
 
             if not compile_result[0]:
                 output_file.write(f"Your submission did not compile. See compiler output below\nYour score: 0/{info.total_points}\n\nCompiler Output:\n")
@@ -206,7 +210,7 @@ def grade_external(info, dir_to_grade, dont_grade, result_csv, timeout):
                 result_csv.write(f"{student_name},{student_id},{score},{dir_to_grade}{sub_file}/{student_name}.results.txt\n")
                 continue
 
-            run_result = run_cmd(info.run_step_command, timeout)
+            run_result = run_cmd(info.run_step_command, [], timeout)
 
             if not run_result[0] or not os.path.isfile(info.file_with_grade):
                 output_file.write(f"Your submission did not produce the expected result file when running the driver. Most likely a Segmentation Fault\nYour score: 0/{info.total_points}")
@@ -312,7 +316,7 @@ def grade_interpreted(info, dir_to_grade, dont_grade, result_csv, timeout):
                                         info.main_file, 
                                         info.common_file, 
                                         output_file,
-                                        timeout)
+                                        timeout, info)
                 
             # write score, special message for people that got a 100 :)
             if (score == info.total_points):
@@ -445,6 +449,7 @@ def grade_compiled(info, dir_to_grade, dont_grade, orig_dir, json_file, json_fil
                                                 output_file,
                                                 info.reference_exe_args,
                                                 info.student_exe_args,
+                                                info.compiler,
                                                 timeout)
 
             # write score, special message for people that got a 100 :)
@@ -474,11 +479,11 @@ Runs tests for interpreted submissions
     common_file        - the file/class that is represented by both the student's submission and the reference solution
     output_file        - the output file for this submission
 """
-def run_test_interpreted(student_file, points, reference_solution, main_file, common_file, output_file, timeout):
+def run_test_interpreted(student_file, points, reference_solution, main_file, common_file, output_file, timeout, info):
     score = 0
 
     os.rename(student_file, common_file)
-    student_run = run_cmd(f"./{main_file}", timeout)
+    student_run = run_cmd(f"./{main_file}", info.student_exe_args, timeout)
 
     if (not student_run[0]):
         output_file.write(f"An exception occurred while running your program:\n{student_run[1]}\n")
@@ -489,13 +494,13 @@ def run_test_interpreted(student_file, points, reference_solution, main_file, co
     os.rename(reference_solution, common_file)
 
     # shouldn't need to check that the reference solution encounters an exception
-    reference_output = run_cmd(f"./{main_file}", timeout)[1].split("\n")
+    reference_output = run_cmd(f"./{main_file}", info.reference_exe_args, timeout)[1].split("\n")
 
     for i in range(len(reference_output) - 1):
         if (i >= len(student_output)):
             output_file.write(f"Your code did not produce enough lines! -{points} points")
             output_file.write(f"Expected: {reference_output[i]}\n")
-            output_file.write(f"Recieved: <empty line>\n\n")
+            output_file.write(f"Received: <empty line>\n\n")
         elif (student_output[i].lower() == reference_output[i].lower()):
             score += points
         else:
@@ -563,7 +568,7 @@ Runs tests that write to standard output
     exp_stu_output - the output of the student's solution
     output_file    - the output file for this submission
 """
-def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_output, exp_stu_output, output_file, ref_args, stu_args, timeout):
+def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_output, exp_stu_output, output_file, ref_args, stu_args, compiler, timeout):
     score = 0
 
     # run reference solution on generated input
@@ -574,6 +579,9 @@ def run_tests_output_files(input_file, student_exe, ref_exe, points, exp_ref_out
     
     ref_lines = open(exp_ref_output, "r").readlines()
     # run student solution on generated input
+    
+    if compiler == "gcc":
+        student_exe = "./a.out"
 
     student_output = run_cmd(student_exe, stu_args, timeout)
     if (not student_output[0]):

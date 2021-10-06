@@ -1,0 +1,16 @@
+{
+    "timeout": 3,
+    "assignment_id": -1,
+    "compiler": "gcc",
+    "generator": "quote_picker.py",
+    "generator_output": "input.txt",
+    "reference_exe": "reference",
+    "reference_exe_args": ["input.txt", "ref_output.txt"],
+    "reference_exe_output": "ref_output.txt",   
+    "student_exe_args": ["input.txt", "output.txt"],
+    "stdin": false,
+    "stdout": false,
+    "output_filename": "output.txt",
+    "total_points": 20,
+    "points_per_line": 2
+}                       
